@@ -1,0 +1,10 @@
+C:\Users\Ella\source\repos\covid-19\covid-19\obj\Debug\covid-19.csprojAssemblyReference.cache
+C:\Users\Ella\source\repos\covid-19\covid-19\obj\Debug\covid-19.csproj.CoreCompileInputs.cache
+C:\Users\Ella\source\repos\covid-19\covid-19\bin\Debug\covid-19.exe.config
+C:\Users\Ella\source\repos\covid-19\covid-19\bin\Debug\covid-19.exe
+C:\Users\Ella\source\repos\covid-19\covid-19\bin\Debug\covid-19.pdb
+C:\Users\Ella\source\repos\covid-19\covid-19\obj\Debug\covid-19.exe
+C:\Users\Ella\source\repos\covid-19\covid-19\obj\Debug\covid-19.pdb
+C:\Users\Ella\source\repos\covid-19\covid-19\bin\Debug\System.ValueTuple.dll
+C:\Users\Ella\source\repos\covid-19\covid-19\bin\Debug\System.ValueTuple.xml
+C:\Users\Ella\source\repos\covid-19\covid-19\obj\Debug\covid-19.csproj.CopyComplete

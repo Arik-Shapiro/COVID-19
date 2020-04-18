@@ -48,6 +48,7 @@ namespace covid_19.logic
             {
                 board[person.X, person.Y] = person;
             }
+            PrintBoard();
         }
 
         private void MovePerson(object sender, MoveEvent e)
@@ -55,7 +56,6 @@ namespace covid_19.logic
             Person person = (Person)sender;
             if (IllegalMove(e))
             {
-                Console.WriteLine("Person: {0} hit the wall, it was pretty painful.", person.Name);
                 return;
             }
             if (Interlocked.Increment(ref locks[e.NewX, e.NewY]) == 1)
@@ -66,10 +66,24 @@ namespace covid_19.logic
                     board[e.PrevX, e.PrevY] = null;
                     person.X = e.NewX;
                     person.Y = e.NewY;
+                    PrintOneEmpty(e.PrevX, e.PrevY);
+                    PrintOnePerson(person);
                 }
                 Interlocked.Decrement(ref locks[e.NewX, e.NewY]);
             }
-            PrintBoard();
+        }
+
+
+        private void PrintOnePerson(Person person)
+        {
+            Console.SetCursorPosition((Console.WindowWidth - size) / 2 + person.X, person.Y);
+            Console.WriteLine(person);
+        }
+
+        private void PrintOneEmpty(int x, int y)
+        {
+            Console.SetCursorPosition((Console.WindowWidth - size) / 2 + x, y);
+            Console.WriteLine("_");
         }
 
         private void InfectPeople(object sender, InfectEvent e)
@@ -79,7 +93,6 @@ namespace covid_19.logic
             int endY = Math.Min(e.Y + e.InfectionRange, size - 1);
             int endX = Math.Min(e.X + e.InfectionRange, size - 1);
 
-            List<Person> peopleToInfect = new List<Person>();
             for(int i = startY; i <= endY; i++)
             {
                 for(int j = startX; j <= endX; j++)
@@ -90,7 +103,6 @@ namespace covid_19.logic
                         if (person != null && !sender.Equals(person))
                         {
                             person.Infect();
-                            PrintBoard();
                         }
                     }
                     Interlocked.Decrement(ref locks[i, j]);
@@ -109,15 +121,7 @@ namespace covid_19.logic
                     Console.SetCursorPosition((Console.WindowWidth - size) / 2 , i);
                     for (int j = 0; j < size; j++)
                     {
-                        Person person = board[i, j];
-                        if (person == null)
-                        {
-                            Console.Write("_");
-                        }
-                        else
-                        {
-                            Console.Write(person.ToString());
-                        }
+                        Console.Write("_");
                     }
                     Console.Write('\n');
                 }

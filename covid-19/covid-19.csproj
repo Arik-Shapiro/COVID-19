@@ -47,13 +47,20 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="logic\Block.cs" />
     <Compile Include="logic\Board.cs" />
-    <Compile Include="logic\Event\MoveEvent.cs" />
-    <Compile Include="logic\Event\InfectEvent.cs" />
+    <Compile Include="logic\Doctor.cs" />
+    <Compile Include="logic\EmptyBlock.cs" />
+    <Compile Include="logic\events\HealEvent.cs" />
+    <Compile Include="logic\events\MoveEvent.cs" />
+    <Compile Include="logic\events\InfectEvent.cs" />
     <Compile Include="logic\Person.cs" />
+    <Compile Include="logic\RandomPersonFactory.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="service\DTO\BlockInfo.cs" />
     <Compile Include="service\GameController.cs" />
+    <Compile Include="view\ConsolePrinter.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

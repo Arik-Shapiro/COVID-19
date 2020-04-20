@@ -5,27 +5,32 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using covid_19.logic.Event;
+using covid_19.logic.events;
+using covid_19.service.DTO;
 
 namespace covid_19.logic
 {
     class Board
     {
-        public Board(List<Person> people, int size)
+        public Board(List<Person> people, int width, int height)
         {
-            this.size = size;
+            _width = width;
+            _height = height;
+            board = new Block[_height, _width];
+            _locks = new object[_height, _width];
+            observers = new List<IObserver<BlockInfo>>();
             SubscribeAll(people);
-            board = new Person [size, size];
-            locks = new int[size, size];
-            InitializeBoard(people);
         }
 
-        private int size;
-        private Person[,] board;
-        private int[,] locks;
+        private int _width;
+        private int _height;
+        private Block[,] board;
+        private object[,] _locks;
         private void SubscribeAll(List<Person> people)
         {
-            foreach(Person person in people){
-                Subscribe(person);
+            foreach (Person person in people)
+            {
+                Subscribe((dynamic)person);
             }
         }
 
@@ -34,21 +39,32 @@ namespace covid_19.logic
             person.OnMove += MovePerson;
             person.OnInfect += InfectPeople;
         }
-
-        private void InitializeBoard(List<Person> people)
+        private void Subscribe(Doctor doctor)
         {
-            for(int i = 0; i < size; i++)
+            doctor.OnMove += MovePerson;
+            doctor.OnInfect += InfectPeople;
+            doctor.OnHeal += HealPeople;
+        }
+
+        public void InitializeBoard(List<Person> people)
+        {
+
+            foreach (Person person in people)
             {
-                for(int j = 0; j < size; j++)
+                board[person.Y, person.X] = person;
+            }
+            for (int i = 0; i < _height; i++)
+            {
+                for (int j = 0; j < _width; j++)
                 {
-                    locks[i, j] = 0;
+                    if(board[i, j] == null)
+                    {
+                        board[i, j] = new EmptyBlock(j, i);
+                    }
+                    _locks[i, j] = new object();
+                    observers.ForEach(o => o.OnNext(board[i, j].GetBlockInfo()));
                 }
             }
-            foreach(Person person in people)
-            {
-                board[person.X, person.Y] = person;
-            }
-            PrintBoard();
         }
 
         private void MovePerson(object sender, MoveEvent e)
@@ -58,79 +74,104 @@ namespace covid_19.logic
             {
                 return;
             }
-            if (Interlocked.Increment(ref locks[e.NewX, e.NewY]) == 1)
+            object locker = _locks[e.NewY, e.NewX];
+            if (Monitor.TryEnter(locker))
             {
-                if (board[e.NewX, e.NewY] == null)
+                try
                 {
-                    board[e.NewX, e.NewY] = board[e.PrevX, e.PrevY];
-                    board[e.PrevX, e.PrevY] = null;
-                    person.X = e.NewX;
-                    person.Y = e.NewY;
-                    PrintOneEmpty(e.PrevX, e.PrevY);
-                    PrintOnePerson(person);
+                    if (board[e.NewY, e.NewX].isEmpty())
+                    {
+                        Block temp = board[e.NewY, e.NewX];
+                        board[e.NewY, e.NewX] = person;
+                        board[e.PrevY, e.PrevX] = temp;
+                        temp.X = e.PrevX;
+                        temp.Y = e.PrevY;
+                        person.X = e.NewX;
+                        person.Y = e.NewY;
+                        UpdateBoard(temp);
+                        UpdateBoard(person);
+                    }
                 }
-                Interlocked.Decrement(ref locks[e.NewX, e.NewY]);
+                finally
+                {
+                    Monitor.Exit(locker);
+                }
             }
         }
 
-
-        private void PrintOnePerson(Person person)
+        private void UpdateBoard(Block block)
         {
-            Console.SetCursorPosition((Console.WindowWidth - size) / 2 + person.X, person.Y);
-            Console.WriteLine(person);
-        }
-
-        private void PrintOneEmpty(int x, int y)
-        {
-            Console.SetCursorPosition((Console.WindowWidth - size) / 2 + x, y);
-            Console.WriteLine("_");
+            observers.ForEach(o => o.OnNext(block.GetBlockInfo()));
         }
 
         private void InfectPeople(object sender, InfectEvent e)
         {
-            int startY = Math.Max(e.Y - e.InfectionRange, 0);
-            int startX = Math.Max(e.X - e.InfectionRange, 0);
-            int endY = Math.Min(e.Y + e.InfectionRange, size - 1);
-            int endX = Math.Min(e.X + e.InfectionRange, size - 1);
-
-            for(int i = startY; i <= endY; i++)
-            {
-                for(int j = startX; j <= endX; j++)
-                {
-                    Person person = board[i, j];
-                    if(Interlocked.Increment(ref locks[i, j]) == 1)
-                    {
-                        if (person != null && !sender.Equals(person))
-                        {
-                            person.Infect();
-                        }
-                    }
-                    Interlocked.Decrement(ref locks[i, j]);
-                }
-            }
+            PerformRangedAction(e.X, e.Y, e.InfectionRange, sender, block => { block.Infect(); UpdateBoard(block); });
         }
 
-        private void PrintBoard()
+        private void HealPeople(object sender, HealEvent e)
         {
-            lock (this)
+            PerformRangedAction(e.X, e.Y, e.HealRange, sender, block => { block.Heal(); UpdateBoard(block); });
+        }
+
+        private void PerformRangedAction(int x, int y, int range, object actionPerformer, Action<Block> action)
+        {
+            int startY = Math.Max(y - range, 0);
+            int startX = Math.Max(x - range, 0);
+            int endY = Math.Min(y + range, _height - 1);
+            int endX = Math.Min(x + range, _width - 1);
+
+            for (int i = startY; i <= endY; i++)
             {
-                Person[,] board = this.board;
-                //Console.Clear();
-                for (int i = 0; i < size; i++)
+                for (int j = startX; j <= endX; j++)
                 {
-                    Console.SetCursorPosition((Console.WindowWidth - size) / 2 , i);
-                    for (int j = 0; j < size; j++)
+                    Block block = board[i, j];
+                    object locker = _locks[i, j];
+                    if (Monitor.TryEnter(locker))
                     {
-                        Console.Write("_");
+                        try
+                        {
+                            if (block != null && !actionPerformer.Equals(block))
+                            {
+                                action(block);
+                            }
+                        }
+                        finally
+                        {
+                            Monitor.Exit(_locks[i, j]);
+                        }
                     }
-                    Console.Write('\n');
                 }
             }
         }
 
         private bool IllegalMove(MoveEvent e)
         {
-            return e.NewX < 0 || e.NewY < 0 || e.NewX >= size || e.NewY >= size;
+            return e.NewX < 0 || e.NewY < 0 || e.NewX >= _width || e.NewY >= _height;
+        }
+
+        List<IObserver<BlockInfo>> observers;
+        public IDisposable Subscribe(IObserver<BlockInfo> observer)
+        {
+            observers.Add(observer);
+            return new Unsubscriber<BlockInfo>(observers, observer);
+        }
+        internal class Unsubscriber<PersonInfo> : IDisposable
+        {
+            private List<IObserver<PersonInfo>> _observers;
+            private IObserver<PersonInfo> _observer;
+
+            internal Unsubscriber(List<IObserver<PersonInfo>> observers, IObserver<PersonInfo> observer)
+            {
+                this._observers = observers;
+                this._observer = observer;
+            }
+
+            public void Dispose()
+            {
+                if (_observers.Contains(_observer))
+                    _observers.Remove(_observer);
+            }
         }
     }
 }

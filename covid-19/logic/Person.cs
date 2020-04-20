@@ -1,4 +1,6 @@
 ﻿using covid_19.logic.Event;
+using covid_19.service.DTO;
+using covid_19.view;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,12 +9,39 @@ using System.Threading.Tasks;
 
 namespace covid_19.logic
 {
-    class Person
+    public enum State 
     {
-        private enum State { Sick, Healthy, Carrying, SickQuarantined }
-        private enum Command { Infect, Heal }
+        Sick,
+        Healthy,
+        Carrying,
+        SickQuarantined 
+    }
+    class Person : Block
+    {
+        protected enum Command 
+        {
+            Infect,
+            Heal
+        }
 
-        private State getState(State current, Command command)
+
+        protected static class Probabilities
+        {
+            public const int Infect = 5;
+            public const int Heal = 20;
+        }
+
+        protected static class ThreadTimeIntervals
+        {
+            public const int MinAction = 100;
+            public const int MaxAction = 500;
+            public const int DoctorHeal = 50;
+            public const int InfectPerson = 50;
+        }
+
+        private const int InfectionRange = 2;
+
+        protected State getState(State current, Command command)
         {
             return (current, command) switch
             {
@@ -25,92 +54,98 @@ namespace covid_19.logic
             };
         }
 
-        private object stateLock;
+        protected object stateLock;
 
-        private void ChangeState(Command command)
+        protected void ChangeState(Command command)
         {
             lock (stateLock)
-            { 
-                state = getState(state, command);
+            {
+                _state = getState(_state, command);
             }
         }
 
-        private State state;
+        protected State _state;
 
-        private static Random rnd = new System.Random();
+        public static Random rnd = new Random();
         public event EventHandler<MoveEvent> OnMove;
         public event EventHandler<InfectEvent> OnInfect;
 
         public bool ShouldStop { get; set; }
-        public int X { get; set; }
-        public int Y { get; set; }
-        public string Name { get; set; }
-        public int MaxRnd { get; set; }
 
-
-        private List<Action> moveAction;
-        private readonly Dictionary<State, Action> actions;
-        public Person(string name, int x, int y, int maxRnd, bool isSick)
+        protected List<Action> _moveAction;
+        private readonly Dictionary<State, Action> _actions;
+        public Person(int x, int y, State state) : base(x, y)
         {
-            Name = name;
-            X = x;
-            Y = y;
-            MaxRnd = maxRnd;
-            moveAction = new List<Action>() { MoveUp, MoveDown, MoveLeft, MoveRight };
-            actions = new Dictionary<State, Action>() { { State.Healthy, HealthyAction }, { State.Sick, SickAction} };
-            state = isSick ? State.Sick : State.Healthy;
+            _moveAction = new List<Action>() {
+                MoveUp,
+                MoveDown,
+                MoveLeft,
+                MoveRight
+            };
+            _actions = new Dictionary<State, Action>() {
+                { State.Healthy, HealthyAction },
+                { State.Sick, SickAction }
+            };
+            _state = state;
             ShouldStop = false;
             stateLock = new object();
-            infectThread = new Thread(InfectSurroundings);
+            _infectThread = new Thread(InfectSurroundings);
         }
 
 
         public void Run()
         {
-            int rndX = rnd.Next(MaxRnd);
-            int rndY = rnd.Next(MaxRnd);
-            OnMove?.Invoke(this, new MoveEvent { PrevX = X, PrevY = Y, NewX = rndX, NewY = Y });
             while (!ShouldStop)
             {
-                State currentState = state;
-                actions[currentState]();
-                Thread.Sleep(rnd.Next(500, 1500));
+                State currentState = _state;
+                _actions[currentState]();
+                Thread.Sleep(rnd.Next(ThreadTimeIntervals.MinAction, ThreadTimeIntervals.MaxAction));
             }
         }
 
-        private void HealthyAction()
+        protected virtual void HealthyAction()
         {
-            moveAction[rnd.Next(moveAction.Count)]();
+            _moveAction[rnd.Next(_moveAction.Count)]();
         }
 
-        private Thread infectThread;
-        private void SickAction()
+        private Thread _infectThread;
+        protected void SickAction()
         {
-            if (!infectThread.IsAlive)
+            if (!_infectThread.IsAlive)
             {
-                infectThread.Start();
+                _infectThread.Start();
             }
-            moveAction[rnd.Next(moveAction.Count)]();
+            _moveAction[rnd.Next(_moveAction.Count)]();
         }
 
         private void InfectSurroundings()
         {
-            State currentState = this.state;
-            while (currentState.Equals(State.Sick)){
-                Thread.Sleep(100);
+            State currentState = this._state;
+            while (currentState.Equals(State.Sick))
+            {
                 int currentX = this.X;
                 int currentY = this.Y;
-                OnInfect?.Invoke(this, new InfectEvent { X = currentX, Y = currentY, InfectionRange = 1 });
-                currentState = this.state;
+                OnInfect?.Invoke(this, new InfectEvent { X = currentX, Y = currentY, InfectionRange = Person.InfectionRange });
+                currentState = this._state;
+                Thread.Sleep(ThreadTimeIntervals.InfectPerson);
+            }
+            _infectThread = new Thread(InfectSurroundings);
+        }
+        public override void Infect()
+        {
+            int chance = rnd.Next(1, 100);
+            if (chance <= Probabilities.Infect)
+            {
+                ChangeState(Command.Infect);
             }
         }
-        public void Infect()
+        public override void Heal()
         {
-            ChangeState(Command.Infect);
-        }
-        public void Heal()
-        {
-            ChangeState(Command.Heal);
+            int chance = rnd.Next(1, 100);
+            if (chance <= Probabilities.Heal)
+            {
+                ChangeState(Command.Heal);
+            }
         }
 
         private void MoveUp()
@@ -129,11 +164,9 @@ namespace covid_19.logic
         {
             OnMove?.Invoke(this, new MoveEvent { PrevX = X, PrevY = Y, NewX = X + 1, NewY = Y });
         }
-
-        public override string ToString()
+        public override BlockInfo GetBlockInfo()
         {
-            if (state.Equals(State.Sick)) return "*";
-            else return "#";
+            return new BlockInfo(X, Y, _state == State.Healthy ? BlockType.HealthyPerson : BlockType.Sick);
         }
     }
 }
